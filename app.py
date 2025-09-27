@@ -16,7 +16,7 @@ def bot():
     message = response.message()
 
     # Step 1: Start
-    if incoming_msg.lower() == "hi":
+    if incoming_msg.lower() == "hi,hii,hiii":
         message.body("👋 Welcome to DB Shukla's Clinic!\n\nPlease type '1' to book an appointment.")
 
     # Step 2: Ask for Name
