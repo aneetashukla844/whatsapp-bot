@@ -4,34 +4,75 @@ from twilio.twiml.messaging_response import MessagingResponse
 app = Flask(__name__)
 
 token_counter = 1
-appointments = {}
+appointments = {}  # phone -> info
+sessions = {}      # WhatsApp sender -> current flow
 
 @app.route("/bot", methods=["POST"])
 def bot():
     global token_counter
 
     incoming_msg = request.values.get('Body', '').strip()
-    phone_number = request.values.get('From', '')
+    sender = request.values.get('From', '')
     response = MessagingResponse()
     message = response.message()
 
-    if incoming_msg.lower() == "hi":
-        message.body("👋 Welcome to Dr. Sharma's Clinic!\n\nPlease type '1' to book an appointment.")
-    elif incoming_msg == "1":
-        message.body("✅ Please enter your *full name* to book your appointment.")
-        appointments[phone_number] = {"status": "awaiting_name"}
-    elif phone_number in appointments and appointments[phone_number]["status"] == "awaiting_name":
-        # Save name and assign token
-        user_name = incoming_msg
-        appointments[phone_number]["name"] = user_name
-        appointments[phone_number]["status"] = "confirmed"
-        appointments[phone_number]["token"] = token_counter
-        token_msg = f"📝 Appointment Confirmed!\n\nName: {user_name}\nPhone: {phone_number[-10:]}\nToken No: {token_counter}"
-        token_counter += 1
-        message.body(token_msg)
-    else:
-        message.body("❓ I didn't understand that. Please type 'hi' to start.")
+    # Initialize session if not exists
+    if sender not in sessions:
+        sessions[sender] = {"step": "ask_name"}
 
+    step = sessions[sender]["step"]
+
+    # Step 1: Ask patient name
+    if step == "ask_name":
+        sessions[sender]["step"] = "ask_phone"
+        sessions[sender]["patient_name"] = incoming_msg
+        message.body("✅ Please enter the patient’s phone number.")
+        return str(response)
+
+    # Step 2: Ask patient phone
+    if step == "ask_phone":
+        patient_phone = incoming_msg
+
+        # Check if already booked
+        for info in appointments.values():
+            if info.get("phone") == patient_phone:
+                message.body(f"📝 Appointment already booked!\nVisit to the clinic between 9 to 2\nThank you")
+                sessions[sender]["step"] = "finished"
+                return str(response)
+
+        # New appointment
+        patient_name = sessions[sender]["patient_name"]
+        token_number = token_counter
+        token_counter += 1
+
+        appointments[sender] = {
+            "name": patient_name,
+            "phone": patient_phone,
+            "token": token_number
+        }
+
+        sessions[sender]["step"] = "options"
+
+        message.body(f"📝 Appointment Confirmed!\n\nName: {patient_name}\nPhone: {patient_phone}\nToken No: {token_number}\n\nPlease choose an option:\n1. Book another appointment\n2. Talk to doctor\n3. Exit")
+        return str(response)
+
+    # Step 3: Handle options after booking
+    if step == "options":
+        if incoming_msg == "1":
+            sessions[sender]["step"] = "ask_name"
+            message.body("✅ Enter the name of the patient for the new appointment.")
+        elif incoming_msg == "2":
+            message.body("📞 You can contact Dr. Sharma at +91-9876543210")
+        elif incoming_msg == "3":
+            patient_info = appointments.get(sender, {})
+            message.body(f"Thank you! Visit to the clinic between 9 to 2\nPatient: {patient_info.get('name', '')}")
+            sessions[sender]["step"] = "finished"
+        else:
+            message.body("❓ Invalid option. Please choose:\n1. Book another appointment\n2. Talk to doctor\n3. Exit")
+        return str(response)
+
+    # Step 4: Finished or fallback
+    message.body("❓ Something went wrong. Please start again.")
     return str(response)
 
 if __name__ == "__main__":
