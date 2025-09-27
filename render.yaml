@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: whatsapp-bot
+    name: whatsapp-clinic-bot
     env: python
     plan: free
     buildCommand: pip install -r requirements.txt
