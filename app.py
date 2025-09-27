@@ -1,4 +1,34 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request
+from twilio.rest import Client
+import os
+
+app = Flask(__name__)
+
+# Your Twilio credentials (use environment variables or paste directly for test)
+ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "YOUR_SID_HERE")
+AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "YOUR_AUTH_TOKEN_HERE")
+WHATSAPP_NUMBER = "whatsapp:+14155238886"
+
+client = Client(ACCOUNT_SID, AUTH_TOKEN)
+
+user_sessions = {}
+
+def send_interactive_message(to, question, options):
+    buttons = [{"type": "reply", "reply": {"id": opt.lower(), "title": opt}} for opt in options]
+    client.messages.create(
+        from_=WHATSAPP_NUMBER,
+        to=to,
+        interactive={
+            "type": "button",
+            "body": {"text": question},
+            "action": {"buttons": buttons}
+        }
+    )
+
+@app.route("/bot", methods=["POST"])
+def bot():
+    incoming_msg = request.values.get("Body", "").strip().lower()
+    from_number = from flask import Flask, request, jsonify
 from twilio.rest import Client
 from twilio.twiml.messaging_response import MessagingResponse
 
@@ -181,3 +211,42 @@ def bot():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
+.values.get("From", "")
+
+    session = user_sessions.get(from_number, {"step": "language"})
+
+    if session["step"] == "language":
+        send_interactive_message(from_number, "Choose your language / अपनी भाषा चुनें:", ["English", "Hindi"])
+        session["step"] = "await_language"
+
+    elif session["step"] == "await_language":
+        if incoming_msg in ["english", "hindi"]:
+            session["lang"] = "en" if incoming_msg == "english" else "hi"
+            send_interactive_message(from_number, "Do you want to book an appointment?" if session["lang"] == "en" else "क्या आप अपॉइंटमेंट बुक करना चाहते हैं?", ["Yes", "No"])
+            session["step"] = "await_booking"
+        else:
+            send_interactive_message(from_number, "Choose your language / अपनी भाषा चुनें:", ["English", "Hindi"])
+
+    elif session["step"] == "await_booking":
+        if incoming_msg == "yes":
+            client.messages.create(
+                from_=WHATSAPP_NUMBER,
+                to=from_number,
+                body="✅ Booking flow will continue here... (Name, Phone, Address, etc.)"
+            )
+            session["step"] = "done"
+        elif incoming_msg == "no":
+            client.messages.create(
+                from_=WHATSAPP_NUMBER,
+                to=from_number,
+                body="👍 Thank you! If you need anything, just message us."
+            )
+            session["step"] = "done"
+        else:
+            send_interactive_message(from_number, "Please choose:", ["Yes", "No"])
+
+    user_sessions[from_number] = session
+    return "OK", 200
+
+if __name__ == "__main__":
+    app.run(debug=True)
